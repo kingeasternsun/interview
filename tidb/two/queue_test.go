@@ -4,7 +4,7 @@
  * @Author: kingeasternsun
  * @Date: 2021-02-25 14:57:51
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-02-25 16:17:40
+ * @LastEditTime: 2021-02-25 16:27:01
  * @FilePath: \tidb\two\queue_test.go
  */
 package two
@@ -407,3 +407,67 @@ func TestAddMultiBugProduceOnce(t *testing.T) {
 	}
 
 }
+
+//item 按添加的顺序被处理，即使是有多个消费者
+func TestInOrder(t *testing.T) {
+
+	res := make([]string, 0)
+	mx := sync.Mutex{}
+	q := NewTiQueue(1000)
+	for v := 0; v < 1000; v++ {
+		err := q.Add(IntItem(v))
+		if err != nil {
+			t.Error(err)
+		}
+		status := q.GetItemStatus(IntItem(v))
+		if status != Ready {
+			t.Errorf("%v status %v not equal ready", v, status)
+		}
+	}
+	consumerNumber := 8
+	wg := sync.WaitGroup{}
+	wg.Add(consumerNumber)
+
+	//构建8个 消费者
+	for i := 0; i < consumerNumber; i++ {
+		go func() {
+
+			for {
+				//非阻塞读
+				item, shutdown, _ := q.Get(false)
+				if shutdown {
+					break
+				}
+				mx.Lock()
+				res = append(res, item.GetID())
+				mx.Unlock()
+
+				status := q.GetItemStatus(item)
+				if status != InProcess {
+					t.Errorf("%v status %v not equal InProcess ", item, status)
+				}
+
+				//完成任务
+				q.Done(item)
+				status = q.GetItemStatus(item)
+				if status != NotExist {
+					t.Errorf("%v status %v not equal NotExist ", item, status)
+				}
+
+			}
+
+			wg.Done()
+
+		}()
+	}
+
+	wg.Wait()
+
+	for i := 1; i < len(res); i++ {
+		if res[i] < res[i-1] {
+			t.Errorf("%v less %v", res[i], res[i-1])
+		}
+	}
+}
+
+// 支持关闭队列通知
