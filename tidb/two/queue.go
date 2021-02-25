@@ -4,8 +4,8 @@
  * @Author: kingeasternsun
  * @Date: 2021-02-25 10:00:18
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-02-25 11:57:06
- * @FilePath: \two\queue.go
+ * @LastEditTime: 2021-02-25 13:46:06
+ * @FilePath: \tidb\two\queue.go
  */
 package two
 
@@ -89,12 +89,14 @@ type TiQueue struct {
 	sync.Mutex
 	ItemStatus map[string]uint8 //记录item的状态 ，
 	Closed     bool             //标记是否已经关闭
+	once       sync.Once
 }
 
 var errExceedCap = errors.New("queue is full")
 var errClosed = errors.New("queue is close")
 var errEmpty = errors.New("queue is empty")
 var errItemNotGet = errors.New("item not get") //item没有Get就Donel
+var errItemExist = errors.New("item exist")    //item 已经存在
 
 //NewTiQueue 队列初始化
 func NewTiQueue(maxCap int) *TiQueue {
@@ -136,18 +138,11 @@ func (q *TiQueue) Add(item Itemer) error {
 	}
 
 	//其他情况下都不可以再进行添加了
-
-	return nil
+	return errItemExist
 }
 
 //Get 从队列中获取item，block 标记是否阻塞读
 func (q *TiQueue) Get(block bool) (item Itemer, shutdown bool, err error) {
-	// //快速判定，因为队列不可能从关闭变为开启
-	// if q.Closed {
-	// 	err = errClosed
-	// 	shutdown = true
-	// 	return
-	// }
 
 	//阻塞读
 	if block {
@@ -224,6 +219,32 @@ func (q *TiQueue) Done(item Itemer) (err error) {
 
 	return
 
+}
+
+//ShutDown 关闭
+func (q *TiQueue) ShutDown() {
+
+	q.Lock()
+	q.once.Do(func() {
+		q.Closed = true
+		close(q.Queue)
+	})
+
+	return
+}
+
+//ShuttingDown 判断是否在关闭中
+func (q *TiQueue) ShuttingDown() bool {
+	if q.Closed == true {
+		//所有任务都处理完成了
+		if len(q.ItemStatus) == 0 {
+			return false //已经完全关闭了 ，而不是关闭中
+		}
+
+		return true //关闭中
+	}
+
+	return false //还没有关闭
 }
 
 func (q *TiQueue) getItemStatus(item Itemer) (status ItemStatus) {
