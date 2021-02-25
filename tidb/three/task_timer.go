@@ -4,7 +4,7 @@
  * @Author: kingeasternsun
  * @Date: 2021-02-25 17:01:05
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-02-25 17:44:27
+ * @LastEditTime: 2021-02-25 18:00:36
  * @FilePath: \three\task_timer.go
 
  利用最小堆，实现简单的定时任务调度器。
@@ -20,7 +20,7 @@ import (
 
 type Task func(v interface{})
 type TaskItem struct {
-	TS   int64       //时间戳
+	TS   time.Time   //时间戳
 	Task Task        //具体要执行的任务
 	Par  interface{} //要传入的参数
 }
@@ -58,9 +58,9 @@ func NewTaskTimer(dur time.Duration) *TaskTimer {
 }
 
 //Add 添加任务
-func (t *TaskTimer) Add(task Task) {
+func (t *TaskTimer) Add(tm time.Time, task Task, par interface{}) {
 	t.mu.Lock()
-	heap.Push(&t.Heap, TaskItem{TS: getTimeStamp(), Task: task}) //因为题目要求精度是分钟，所以这里用秒也就足够了
+	heap.Push(&t.Heap, TaskItem{TS: tm, Task: task, Par: par}) //因为题目要求精度是分钟，所以这里用秒也就足够了
 	t.mu.Unlock()
 
 }
@@ -108,7 +108,7 @@ func (t *TaskTimer) checkTask() {
 		}
 
 		//到时间了
-		if oldTask.TS <= getTimeStamp() {
+		if oldTask.TS.Before(time.Now()) {
 			go oldTask.Task(oldTask.Par)
 			t.Pop()
 		} else {
