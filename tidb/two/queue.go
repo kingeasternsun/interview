@@ -4,7 +4,7 @@
  * @Author: kingeasternsun
  * @Date: 2021-02-25 10:00:18
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-02-25 13:46:06
+ * @LastEditTime: 2021-02-25 16:12:43
  * @FilePath: \tidb\two\queue.go
  */
 package two
@@ -98,12 +98,13 @@ var errEmpty = errors.New("queue is empty")
 var errItemNotGet = errors.New("item not get") //item没有Get就Donel
 var errItemExist = errors.New("item exist")    //item 已经存在
 
-//NewTiQueue 队列初始化
+//NewTiQueue 队列初始化 TODO:maccap为负数时候是否判错
 func NewTiQueue(maxCap int) *TiQueue {
 
 	return &TiQueue{
-		MaxCap: maxCap,
-		Queue:  make(chan Itemer, maxCap),
+		MaxCap:     maxCap,
+		Queue:      make(chan Itemer, maxCap),
+		ItemStatus: make(map[string]uint8, 0),
 	}
 }
 
@@ -194,9 +195,6 @@ func (q *TiQueue) Done(item Itemer) (err error) {
 	q.Lock()
 	defer q.Unlock()
 
-	q.Lock()
-	defer q.Unlock()
-
 	//更新状态
 	status, ok := q.ItemStatus[item.GetID()]
 	if !ok {
@@ -225,6 +223,7 @@ func (q *TiQueue) Done(item Itemer) (err error) {
 func (q *TiQueue) ShutDown() {
 
 	q.Lock()
+	defer q.Unlock()
 	q.once.Do(func() {
 		q.Closed = true
 		close(q.Queue)
@@ -247,7 +246,7 @@ func (q *TiQueue) ShuttingDown() bool {
 	return false //还没有关闭
 }
 
-func (q *TiQueue) getItemStatus(item Itemer) (status ItemStatus) {
+func (q *TiQueue) GetItemStatus(item Itemer) (status ItemStatus) {
 	q.Lock()
 	defer q.Unlock()
 
