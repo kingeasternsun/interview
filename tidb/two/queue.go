@@ -4,7 +4,7 @@
  * @Author: kingeasternsun
  * @Date: 2021-02-25 10:00:18
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-02-25 16:44:49
+ * @LastEditTime: 2021-02-25 16:53:43
  * @FilePath: \tidb\two\queue.go
  */
 package two
@@ -89,9 +89,8 @@ type TiQueue struct {
 	Queue  chan Itemer
 	sync.Mutex
 	ItemStatus map[string]uint8 //记录item的状态 ，
-	// Closed     bool             //标记是否已经关闭
-	done chan struct{}
-	once sync.Once
+	done       chan struct{}    //标记是否已经关闭 ,可以返回给消费者或生产者使用
+	once       sync.Once
 }
 
 var errExceedCap = errors.New("queue is full")
