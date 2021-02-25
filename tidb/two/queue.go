@@ -4,7 +4,7 @@
  * @Author: kingeasternsun
  * @Date: 2021-02-25 10:00:18
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-02-25 16:12:43
+ * @LastEditTime: 2021-02-25 16:44:49
  * @FilePath: \tidb\two\queue.go
  */
 package two
@@ -28,6 +28,7 @@ type Queue interface {
 	Done(item interface{})                  //表示 item 被处理完成。
 	ShutDown()                              //关闭队列，不再接收 Add 请求，待队列 item 被处理完后关闭。
 	ShuttingDown() bool                     //队列是否正在关闭。
+
 }
 
 type Itemer interface {
@@ -88,8 +89,9 @@ type TiQueue struct {
 	Queue  chan Itemer
 	sync.Mutex
 	ItemStatus map[string]uint8 //记录item的状态 ，
-	Closed     bool             //标记是否已经关闭
-	once       sync.Once
+	// Closed     bool             //标记是否已经关闭
+	done chan struct{}
+	once sync.Once
 }
 
 var errExceedCap = errors.New("queue is full")
@@ -105,6 +107,7 @@ func NewTiQueue(maxCap int) *TiQueue {
 		MaxCap:     maxCap,
 		Queue:      make(chan Itemer, maxCap),
 		ItemStatus: make(map[string]uint8, 0),
+		done:       make(chan struct{}, 0),
 	}
 }
 
@@ -112,8 +115,10 @@ func NewTiQueue(maxCap int) *TiQueue {
 func (q *TiQueue) Add(item Itemer) error {
 
 	//快速判定，因为队列不可能从关闭变为开启
-	if q.Closed {
+	select {
+	case <-q.done:
 		return errClosed
+	default:
 	}
 
 	if len(q.Queue) == q.MaxCap {
@@ -225,7 +230,7 @@ func (q *TiQueue) ShutDown() {
 	q.Lock()
 	defer q.Unlock()
 	q.once.Do(func() {
-		q.Closed = true
+		close(q.done)
 		close(q.Queue)
 	})
 
@@ -234,18 +239,30 @@ func (q *TiQueue) ShutDown() {
 
 //ShuttingDown 判断是否在关闭中
 func (q *TiQueue) ShuttingDown() bool {
-	if q.Closed == true {
+
+	select {
+	case <-q.done:
 		//所有任务都处理完成了
 		if len(q.ItemStatus) == 0 {
 			return false //已经完全关闭了 ，而不是关闭中
 		}
-
 		return true //关闭中
+	default:
+		return false //还没有关闭
 	}
 
-	return false //还没有关闭
 }
 
+//GetCloseNotify 用于接收关闭通知
+func (q *TiQueue) GetCloseNotify() <-chan struct{} {
+
+	q.Lock()
+	d := q.done
+	q.Unlock()
+	return d
+}
+
+// 获取item状态
 func (q *TiQueue) GetItemStatus(item Itemer) (status ItemStatus) {
 	q.Lock()
 	defer q.Unlock()

@@ -4,7 +4,7 @@
  * @Author: kingeasternsun
  * @Date: 2021-02-25 14:57:51
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-02-25 16:27:01
+ * @LastEditTime: 2021-02-25 16:51:35
  * @FilePath: \tidb\two\queue_test.go
  */
 package two
@@ -470,4 +470,47 @@ func TestInOrder(t *testing.T) {
 	}
 }
 
-// 支持关闭队列通知
+//TestCloseNotify 支持关闭队列通知
+func TestCloseNotify(t *testing.T) {
+
+	q := NewTiQueue(10)
+	for v := 0; v < 10; v++ {
+		err := q.Add(IntItem(v))
+		if err != nil {
+			t.Error(err)
+		}
+		status := q.GetItemStatus(IntItem(v))
+		if status != Ready {
+			t.Errorf("%v status %v not equal ready", v, status)
+		}
+	}
+	consumerNumber := 8
+	wg1 := sync.WaitGroup{}
+	wg1.Add(consumerNumber)
+
+	wg2 := sync.WaitGroup{}
+	wg2.Add(consumerNumber)
+
+	//构建8个 消费者
+	for i := 0; i < consumerNumber; i++ {
+		go func() {
+
+			done := q.GetCloseNotify()
+			wg1.Done()
+			select {
+			case <-done:
+			}
+
+			wg2.Done()
+
+		}()
+	}
+
+	wg1.Wait()
+
+	q.ShutDown()
+
+	//然后8个消费者都收到了通知
+	wg2.Wait()
+
+}
