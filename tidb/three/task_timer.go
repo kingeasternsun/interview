@@ -4,7 +4,7 @@
  * @Author: kingeasternsun
  * @Date: 2021-02-25 17:01:05
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-02-25 18:00:36
+ * @LastEditTime: 2021-02-26 14:45:20
  * @FilePath: \three\task_timer.go
 
  利用最小堆，实现简单的定时任务调度器。
@@ -28,7 +28,7 @@ type TaskItem struct {
 type TaskHeap []TaskItem
 
 func (h TaskHeap) Len() int           { return len(h) }
-func (h TaskHeap) Less(i, j int) bool { return h[i].TS < h[j].TS }
+func (h TaskHeap) Less(i, j int) bool { return h[i].TS.Before(h[j].TS) }
 func (h TaskHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 func (h *TaskHeap) Push(x interface{}) {
 	*h = append(*h, x.(TaskItem))
@@ -62,7 +62,12 @@ func (t *TaskTimer) Add(tm time.Time, task Task, par interface{}) {
 	t.mu.Lock()
 	heap.Push(&t.Heap, TaskItem{TS: tm, Task: task, Par: par}) //因为题目要求精度是分钟，所以这里用秒也就足够了
 	t.mu.Unlock()
+}
 
+//AddTimeOut 另外一种添加方式 也方便测试
+func (t *TaskTimer) AddTimeOut(d time.Duration, task Task, par interface{}) {
+
+	t.Add(time.Now().Add(d), task, par)
 }
 
 //GetOldest 获取最早的任务
