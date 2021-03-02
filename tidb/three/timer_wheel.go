@@ -4,7 +4,7 @@
  * @Author: kingeasternsun
  * @Date: 2021-03-01 11:45:42
  * @LastEditors: kingeasternsun
- * @LastEditTime: 2021-03-02 10:36:17
+ * @LastEditTime: 2021-03-02 10:58:02
  * @FilePath: \three\timer_wheel.go
  */
 package three
@@ -16,7 +16,7 @@ import (
 )
 
 // 时间轮的长度，1440分钟，也就是一天
-const WheelLen = 1440
+// const WheelLen = 1440 //写死不方便测试
 
 type WTask struct {
 	TS       time.Time   //时间戳
@@ -28,19 +28,24 @@ type WTask struct {
 
 //WheelTimer 时间轮定时器
 type WheelTimer struct {
-	mu       [WheelLen]sync.Mutex //每一个格子对应一个lock
-	Wheels   [WheelLen]*WTask     //
-	Tail     [WheelLen]*WTask     // 执行链表的最后一个节点
-	dur      time.Duration        //定时器的检查周期
-	curIndex int                  //当前所在第几个格子
+	mu       []sync.Mutex  //每一个格子对应一个lock
+	Wheels   []*WTask      //
+	Tail     []*WTask      // 执行链表的最后一个节点
+	dur      time.Duration //定时器的检查周期
+	curIndex int           //当前所在第几个格子
+	wheelLen int
 	once     sync.Once
 }
 
 //NewWheelTask 创建任务定时器
-func NewWheelTask(dur time.Duration) *WheelTimer {
+func NewWheelTask(dur time.Duration, wheelLen int) *WheelTimer {
 
 	t := &WheelTimer{
-		dur: dur,
+		dur:      dur,
+		wheelLen: wheelLen,
+		Wheels:   make([]*WTask, wheelLen),
+		Tail:     make([]*WTask, wheelLen),
+		mu:       make([]sync.Mutex, wheelLen),
 	}
 
 	// 初始化一个冗余的头部节点，便于后面的插入 删除
@@ -61,13 +66,13 @@ func (t *WheelTimer) AddTimeOut(d time.Duration, ts time.Time, task Task, par in
 		TS:       ts,
 		Task:     task,
 		Par:      par,
-		CycleCnt: steps / WheelLen,
+		CycleCnt: steps / t.wheelLen,
 	}
 
-	t.mu[steps%WheelLen].Lock()
-	t.Tail[steps%WheelLen].Next = newTask
-	t.Tail[steps%WheelLen] = newTask
-	t.mu[steps%WheelLen].Unlock()
+	t.mu[steps%t.wheelLen].Lock()
+	t.Tail[steps%t.wheelLen].Next = newTask
+	t.Tail[steps%t.wheelLen] = newTask
+	t.mu[steps%t.wheelLen].Unlock()
 
 }
 
@@ -98,9 +103,9 @@ func (t *WheelTimer) Run() {
 }
 
 func (t *WheelTimer) checkTask() {
-	t.mu[t.curIndex%WheelLen].Lock()
-	defer t.mu[t.curIndex%WheelLen].Unlock()
-	pre := t.Wheels[t.curIndex%WheelLen]
+	t.mu[t.curIndex%t.wheelLen].Lock()
+	defer t.mu[t.curIndex%t.wheelLen].Unlock()
+	pre := t.Wheels[t.curIndex%t.wheelLen]
 	p := pre.Next
 
 	for p != nil {
@@ -117,7 +122,7 @@ func (t *WheelTimer) checkTask() {
 		pre.Next = p.Next
 		p = p.Next
 	}
-	t.Tail[t.curIndex%WheelLen] = pre
+	t.Tail[t.curIndex%t.wheelLen] = pre
 
 	return
 }
